@@ -119,7 +119,7 @@ function App() {
     setNewsData([]);
     setSummary({});
 
-    // Zoom map to searched location
+    // Zoom map to location
     const geo = await fetch(
       `https://api.maptiler.com/geocoding/${encodeURIComponent(location)}.json?key=${mapTilerKey}`
     );
@@ -138,7 +138,6 @@ function App() {
 
       const news = await res.json();
 
-      // Skip NaN results if backend doesn't filter them
       const filtered = news.filter(item => item.threat !== 'NaN');
       setNewsData(filtered);
 
@@ -201,7 +200,7 @@ function App() {
         </button>
       </div>
 
-      {/* 📰 News Result Panel */}
+      {/* 📰 News Panel */}
       <div style={{
         position: 'absolute',
         top: '70px',
@@ -217,23 +216,49 @@ function App() {
         boxShadow: '0 0 10px #00FF88',
         fontSize: '14px'
       }}>
-        <h3 style={{ marginBottom: '10px', borderBottom: '1px solid #00FF88', paddingBottom: '4px' }}>🧠 Classified News</h3>
+        <h3 style={{ marginBottom: '10px', borderBottom: '1px solid #00FF88', paddingBottom: '4px' }}>
+          🧠 Classified News
+        </h3>
         {loading ? (
           <div>Loading news...</div>
         ) : newsData.length === 0 ? (
           <div>No results yet.</div>
         ) : (
-          newsData.map((item, index) => (
-            <div key={index} style={{ marginBottom: '12px' }}>
-              <div><strong>[{item.category?.toUpperCase()}]</strong> ({item.threat})</div>
-              <div>{item.title}</div>
-              <a href={item.link} target="_blank" rel="noreferrer" style={{ color: '#00FF88' }}>Read more</a>
-            </div>
-          ))
+          newsData
+            .slice()
+            .sort((a, b) => {
+              const order = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+              return (order[a.threat] ?? 99) - (order[b.threat] ?? 99);
+            })
+            .map((item, index) => (
+              <div key={index} style={{ marginBottom: '12px' }}>
+                <div>
+                  <strong>[{item.category?.toUpperCase()}]</strong>{" "}
+                  <span style={{
+                    color:
+                      item.threat === 'HIGH' ? '#FF3333' :
+                      item.threat === 'MEDIUM' ? '#FFA500' :
+                      item.threat === 'LOW' ? '#FFFF00' : '#00FF88',
+                    fontWeight: 'bold'
+                  }}>
+                    ({item.threat})
+                  </span>
+                </div>
+                <div>{item.title}</div>
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#00FF88', textDecoration: 'underline' }}
+                >
+                  Read more
+                </a>
+              </div>
+            ))
         )}
       </div>
 
-      {/* 📊 Summary Panel */}
+      {/* 📊 Summary */}
       <div style={{
         position: 'absolute',
         top: '70px',
@@ -247,7 +272,9 @@ function App() {
         boxShadow: '0 0 10px #00FF88',
         fontSize: '14px'
       }}>
-        <h3 style={{ marginBottom: '10px', borderBottom: '1px solid #00FF88', paddingBottom: '4px' }}>📊 Summary</h3>
+        <h3 style={{ marginBottom: '10px', borderBottom: '1px solid #00FF88', paddingBottom: '4px' }}>
+          📊 Summary
+        </h3>
         {loading ? (
           <div>Loading summary...</div>
         ) : Object.keys(summary).length === 0 ? (
