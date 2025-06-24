@@ -6,6 +6,8 @@ import requests
 import json
 import logging
 from fastapi.middleware.cors import CORSMiddleware
+import re
+
 
 # Enable logging
 logging.basicConfig(filename="ollama_debug.log", level=logging.DEBUG)
@@ -28,6 +30,14 @@ class LocationQuery(BaseModel):
     location: str
     days: int = 2
 
+def clean_response(text: str) -> str:
+    # Remove lines that contain internal thinking or debugging
+    lines = text.strip().splitlines()
+    return "\n".join(
+        line for line in lines
+        if not line.strip().lower().startswith("<think>")
+    ).strip()
+
 def query_ollama(prompt):
     headers = {"Content-Type": "application/json"}
     payload = {
@@ -37,26 +47,25 @@ def query_ollama(prompt):
         "temperature": 0.3,
         "top_p": 0.8,
         "stream": False,
-        
     }
 
     if DEBUG:
-        print("\n🧠 [PROMPT SENT TO OLLAMA]:")
+        print("\n\U0001f9e0 [PROMPT SENT TO OLLAMA]:")
         print(prompt)
         print("-" * 60)
 
-    response = requests.post(OLLAMA_URL, headers=headers, data=json.dumps(payload))
-
-    if response.status_code == 200:
+    try:
+        response = requests.post(OLLAMA_URL, headers=headers, data=json.dumps(payload), timeout=60)
+        response.raise_for_status()
         reply = response.json().get("response", "").strip()
         if DEBUG:
-            print("🧠 [RESPONSE RECEIVED]:")
+            print("\U0001f9e0 [RESPONSE RECEIVED]:")
             print(reply)
             print("=" * 60)
         logging.debug(f"\nPROMPT:\n{prompt}\nRESPONSE:\n{reply}\n{'='*60}")
         return reply
-    else:
-        print("❌ Error from Ollama:", response.text)
+    except Exception as e:
+        print("❌ Error from Ollama:", e)
         return "Unknown"
 
 def filter_unique_titles(titles: list[str]) -> list[str]:
@@ -115,9 +124,9 @@ Headline: "{title}"
     category, threat = "unknown", "NaN"
     for line in response.splitlines():
         if line.lower().startswith("category:"):
-            category = line.split(":", 1)[1].strip().lower()
+            category = line.split(":", 1)[1].strip().lower().replace("*", "")
         if line.lower().startswith("threat:"):
-            threat = line.split(":", 1)[1].strip().upper()
+            threat = line.split(":", 1)[1].strip().upper().replace("*", "")
     return category, threat
 
 @app.post("/analyze")
@@ -145,7 +154,7 @@ def analyze_location(query: LocationQuery):
                 "published": published.isoformat()
             }
 
-    unique_titles = filter_unique_titles(raw_titles[:15])  # limit to top 5
+    unique_titles = filter_unique_titles(raw_titles[:15])
     logging.debug(unique_titles)
     for title in unique_titles:
         category, threat = classify_with_ollama(title, query.location)

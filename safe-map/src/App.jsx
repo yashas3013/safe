@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import ReactMarkdown from 'react-markdown';
+
+function stripThinking(text) {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
 
 function App() {
   const mapRef = useRef(null);
@@ -8,6 +13,12 @@ function App() {
   const [newsData, setNewsData] = useState([]);
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatTitle, setChatTitle] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+
 
   const mapTilerKey = 'ApoUTstdY1CJFGOL8QLi'; // Replace with your MapTiler key
 
@@ -154,6 +165,29 @@ function App() {
     setLoading(false);
   };
 
+  async function handleSendChat() {
+    if (!chatInput.trim()) return;
+    const userMsg = { role: 'user', content: chatInput.trim() };
+    const newMessages = [...chatMessages, userMsg];
+    setChatMessages(newMessages);
+    setChatInput('');
+    setChatLoading(true);
+
+    const res = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'deepseek-r1:8b',
+        prompt: newMessages.map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join('\n') + '\nAI:',
+        stream: false
+      })
+    });
+
+    const data = await res.json();
+    setChatMessages([...newMessages, { role: 'ai', content: data.response.trim() }]);
+    setChatLoading(false);
+  }
+
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       {/* 🔍 Search input and button */}
@@ -253,6 +287,32 @@ function App() {
                 >
                   Read more
                 </a>
+                <div>
+                  <button
+                    onClick={() => {
+                      setChatTitle(item.title);
+                      setChatMessages([
+                        {
+                          role: 'system',
+                          content: `You are an assistant helping users explore this news: "${item.title}". Answer their questions.`
+                        }
+                      ]);
+                      setChatOpen(true);
+                    }}
+                    style={{
+                      marginTop: '6px',
+                      background: '#00FF88',
+                      color: '#000',
+                      padding: '5px 10px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '13px'
+                    }}
+                  >
+                    Chat
+                  </button>
+                </div>
               </div>
             ))
         )}
@@ -286,8 +346,97 @@ function App() {
         )}
       </div>
 
-      {/* 🌍 Map */}
+      {/* 🗺️ Map */}
       <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* 💬 Chat Modal */}
+      {chatOpen && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: '#111',
+          color: '#00FF88',
+          padding: '20px',
+          borderRadius: '12px',
+          boxShadow: '0 0 15px #00FF88',
+          width: '400px',
+          maxHeight: '80vh',
+          zIndex: 999,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <h3 style={{ marginBottom: '10px', textAlign: 'center' }}>💬 Ask about this article</h3>
+          <div style={{ fontStyle: 'italic', marginBottom: '10px', color: '#aaa', textAlign: 'center' }}>{chatTitle}</div>
+
+          <div style={{ maxHeight: '250px', overflowY: 'auto', marginBottom: '10px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {chatMessages.slice(1).map((msg, i) => (
+              <div key={i} style={{ marginBottom: '8px', width: '100%', textAlign: 'left' }}>
+                <b>{msg.role === 'user' ? 'You' : 'AI'}:</b>{' '}
+                <span style={{ wordBreak: 'break-word' }}>
+                  <ReactMarkdown>{stripThinking(msg.content)}</ReactMarkdown>
+                </span>
+              </div>
+            ))}
+            {chatLoading && <div><i>Thinking...</i></div>}
+          </div>
+
+          <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter' && chatInput.trim()) {
+                  await handleSendChat();
+                }
+              }}
+              placeholder="Ask a question..."
+              style={{
+                flex: 1,
+                padding: '8px',
+                backgroundColor: '#222',
+                color: '#00FF88',
+                border: '1px solid #00FF88',
+                borderRadius: '6px'
+              }}
+            />
+            <button
+              onClick={handleSendChat}
+              style={{
+                background: '#00FF88',
+                color: '#000',
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: '15px',
+              }}
+              disabled={chatLoading || !chatInput.trim()}
+            >
+              Send
+            </button>
+          </div>
+          <button
+            onClick={() => setChatOpen(false)}
+            style={{
+              marginTop: '10px',
+              background: '#333',
+              color: '#00FF88',
+              padding: '6px 12px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 }
