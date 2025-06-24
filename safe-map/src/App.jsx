@@ -20,7 +20,7 @@ function App() {
   const [chatLoading, setChatLoading] = useState(false);
 
 
-  const mapTilerKey = 'ApoUTstdY1CJFGOL8QLi'; // Replace with your MapTiler key
+  const mapTilerKey = import.meta.env.VITE_MAPTILER_KEY;
 
   useEffect(() => {
     const map = new maplibregl.Map({
